@@ -4,12 +4,10 @@
 from __future__ import annotations
 
 import json
-import os
-from pathlib import Path
 import subprocess
 import sys
 
-from handoff import PROVIDERS, STATE_ROOT, read_usage, stop_decision
+from handoff import PROVIDERS, STATE_ROOT, hook, session_id
 
 
 def main() -> int:
@@ -22,8 +20,14 @@ def main() -> int:
         event = json.loads(original)
     except ValueError:
         event = {}
-    usage = read_usage(provider)
-    decision = stop_decision(provider, event, usage) if usage else {}
+    if not isinstance(event, dict) or not session_id(provider, event):
+        print("{}")
+        return 0
+    try:
+        decision = hook(provider, event)
+    except (OSError, ValueError, TypeError) as error:
+        print(f"Quota handoff unavailable: {error}", file=sys.stderr)
+        decision = {}
     if decision:
         print(json.dumps(decision))
         return 0
@@ -34,7 +38,7 @@ def main() -> int:
         fallback = None
     if fallback:
         try:
-            run = subprocess.run(fallback, shell=True, input=original, text=True, capture_output=True, timeout=235)
+            run = subprocess.run(fallback, shell=True, input=original, text=True, capture_output=True, timeout=200)
             sys.stdout.write(run.stdout)
             sys.stderr.write(run.stderr)
             return run.returncode
