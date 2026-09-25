@@ -11,9 +11,6 @@ import handoff
 
 
 class HandoffTests(unittest.TestCase):
-    def tool_decision(self, *args):
-        return handoff.decide(*args, tool=True)
-
     def test_each_provider_selects_its_account_weekly_window(self) -> None:
         for provider, included, excluded in (
             ("codex", "Weekly (7-day)", "5h window"),
@@ -54,10 +51,10 @@ class HandoffTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with patch.object(handoff, "STATE_ROOT", Path(tmp)):
                 event = {"session_id": "task-1"}
-                first = self.tool_decision("codex", event, (99.2, "2030-10-02T00:00:00Z"))
+                first = handoff.decide("codex", event, (99.2, "2030-10-02T00:00:00Z"), tool=True)
                 self.assertIn("Finalize", first["hookSpecificOutput"]["additionalContext"])
-                self.assertEqual(self.tool_decision("codex", event, (99.2, "2030-10-02T00:00:00Z")), {})
-                self.assertTrue(self.tool_decision("codex", {"session_id": "task-2"}, (99.2, "2030-10-02T00:00:00Z")))
+                self.assertEqual(handoff.decide("codex", event, (99.2, "2030-10-02T00:00:00Z"), tool=True), {})
+                self.assertTrue(handoff.decide("codex", {"session_id": "task-2"}, (99.2, "2030-10-02T00:00:00Z"), tool=True))
 
     def test_failed_final_handoff_produces_emergency_document_and_stops(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

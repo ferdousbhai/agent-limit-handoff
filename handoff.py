@@ -64,7 +64,7 @@ def reset_seconds(value):
 
 
 def usable_label(provider, label):
-    return label.lower() in (("weekly",) if provider == "grok" else ("weekly (7-day)",))
+    return label.lower() == ("weekly" if provider == "grok" else "weekly (7-day)")
 
 
 def read_usage(provider):
@@ -147,7 +147,8 @@ def state_path(provider, sid):
 
 def valid_document(path, since):
     try:
-        if path.stat().st_mtime < since or path.stat().st_size < 180:
+        stat = path.stat()
+        if stat.st_mtime < since or stat.st_size < 180:
             return False
         body = path.read_text(errors="replace")
         return all(re.search(r"^## " + re.escape(h) + r"\s*$", body, re.M | re.I) for h in HEADINGS)
@@ -157,9 +158,10 @@ def valid_document(path, since):
 
 def instruction(path, provider, final):
     action = "Finalize" if final else "Prepare"
+    threshold = FINAL_PERCENT if final else PREPARE_PERCENT
     ending = "Stop substantive work after saving the file." if final else "After saving it, you may continue the original task."
     return (
-        f"Weekly {provider} usage is {'99%' if final else '95%'} or higher. {action} this task's handoff at {json.dumps(str(path))}. "
+        f"Weekly {provider} usage is {threshold:g}% or higher. {action} this task's handoff at {json.dumps(str(path))}. "
         "Create its parent directory if needed. Use these headings exactly: "
         + ", ".join("## " + h for h in HEADINGS) + ". "
         "Include the original objective, current branch/worktree, decisions, changed files, commands and results, "
@@ -189,7 +191,8 @@ def decide(provider, event, usage, *, tool=False):
     if not sid or not usage or usage[0] < PREPARE_PERCENT:
         return {}
     used, reset = usage
-    phase = "final" if used >= FINAL_PERCENT else "prepare"
+    final = used >= FINAL_PERCENT
+    phase = "final" if final else "prepare"
     path = handoff_path(provider, sid)
     state_file = state_path(provider, sid)
     try:
@@ -203,7 +206,7 @@ def decide(provider, event, usage, *, tool=False):
             requested_key = f"{phase}_requested_at"
             requested = state.get(requested_key)
             if requested and valid_document(path, requested):
-                if phase == "final" and not tool:
+                if final and not tool:
                     return {"continue": False, "stopReason": f"Weekly limit reached; task handoff saved at {path}."}
                 return {}
             if tool and time.time() - state.get(f"{phase}_noticed_at", 0) < 60:
@@ -211,17 +214,17 @@ def decide(provider, event, usage, *, tool=False):
             state.setdefault(requested_key, time.time())
             if tool:
                 state[f"{phase}_noticed_at"] = time.time()
-                output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": instruction(path, provider, phase == "final")}}
+                output = {"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": instruction(path, provider, final)}}
             else:
                 attempts_key = f"{phase}_attempts"
                 attempts = state.get(attempts_key, 0)
                 if attempts >= 2:
-                    if phase == "final":
+                    if final:
                         emergency_document(path, provider, sid, event)
                         return {"continue": False, "stopReason": f"Emergency task handoff saved at {path}."}
                     return {}
                 state[attempts_key] = attempts + 1
-                output = {"decision": "block", "reason": instruction(path, provider, phase == "final")}
+                output = {"decision": "block", "reason": instruction(path, provider, final)}
             atomic_write(state_file, json.dumps(state, sort_keys=True) + "\n")
             return output
     except BlockingIOError:

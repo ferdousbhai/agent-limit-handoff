@@ -1,8 +1,8 @@
 import json
 import os
+import subprocess
 from pathlib import Path
 import tempfile
-import time
 import unittest
 from unittest.mock import patch
 
@@ -50,7 +50,6 @@ class RegressionTests(unittest.TestCase):
             self.assertEqual(probe.call_count, 1)
 
     def test_invalid_collector_values(self):
-        import subprocess
         for percent, reset in [('NaN', '2030-01-01T00:00:00Z'), (-1, '2030-01-01T00:00:00Z'), (.99, 'bad'), (.99, '2000-01-01T00:00:00Z')]:
             output = json.dumps({'limits': [{'label': 'Weekly (7-day)', 'percent': percent, 'resetsAt': reset}]})
             with patch.object(handoff.subprocess, 'run', return_value=subprocess.CompletedProcess([], 0, output)):

@@ -32,17 +32,25 @@ def backup(path: Path) -> None:
     shutil.copy2(path, folder / f"{path.parent.name}-{path.name}-{stamp}")
 
 
+def add_hook(data: dict, event: str, command: str, **options) -> bool:
+    """Append a command only when it is not already installed."""
+    groups = data.setdefault("hooks", {}).setdefault(event, [])
+    if any(command == handler.get("command")
+           for group in groups for handler in group.get("hooks", [])):
+        return False
+    groups.append({"hooks": [{"type": "command", "command": command, **options}]})
+    return True
+
+
 def install_codex() -> None:
     path = HOME / ".codex/hooks.json"
     data = json.loads(path.read_text()) if path.exists() else {"hooks": {}}
     changed = False
     for event in ("Stop", "PostToolUse"):
-        hooks = data.setdefault("hooks", {}).setdefault(event, [])
         command = f"python3 {quoted(ROOT / 'handoff.py')} codex {event}"
-        if any(command == handler.get("command") for group in hooks for handler in group.get("hooks", [])):
-            continue
-        hooks.append({"hooks": [{"type": "command", "command": command, "timeout": 30, "statusMessage": "Checking weekly Codex limit"}]})
-        changed = True
+        added = add_hook(data, event, command, timeout=30,
+                         statusMessage="Checking weekly Codex limit")
+        changed = changed or added
     if changed:
         backup(path)
         save_json(path, data)
@@ -60,18 +68,16 @@ def install_combined(provider: str, path: Path) -> None:
     command = f"python3 {quoted(ROOT / 'combined_stop.py')} {provider}"
     changed = handler.get("command") != command
     fallback_path = STATE_ROOT / "fallbacks.json"
-    fallbacks = json.loads(fallback_path.read_text()) if fallback_path.exists() else {}
     if changed and "keep-going.mjs" in handler.get("command", ""):
+        fallbacks = json.loads(fallback_path.read_text()) if fallback_path.exists() else {}
         fallbacks[provider] = handler["command"]
         save_json(fallback_path, fallbacks)
     if changed:
         handler["command"] = command
         handler["statusMessage"] = "Checking weekly limit and task handoff"
-    tool_hooks = data.setdefault("hooks", {}).setdefault("PostToolUse", [])
     tool_command = f"python3 {quoted(ROOT / 'handoff.py')} {provider} PostToolUse"
-    if not any(tool_command == h.get("command") for group in tool_hooks for h in group.get("hooks", [])):
-        tool_hooks.append({"hooks": [{"type": "command", "command": tool_command, "timeout": 30}]})
-        changed = True
+    added = add_hook(data, "PostToolUse", tool_command, timeout=30)
+    changed = changed or added
     if changed:
         backup(path)
         save_json(path, data)

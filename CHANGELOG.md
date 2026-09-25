@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.1
+
+- Share installer logic for adding hooks without duplicates.
+- Reuse fallback JSON handling and load installer fallback settings only when needed.
+- Simplify handoff phase checks and derive prompt percentages from threshold constants.
+- Remove redundant filesystem reads and test helpers.
+- Keep Omarchy collectors and existing quota thresholds unchanged.
+
 ## 0.1.0
 
 - Add per-task weekly quota handoffs for Codex, Claude Code, and Grok Build.

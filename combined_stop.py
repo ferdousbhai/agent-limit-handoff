@@ -7,7 +7,7 @@ import json
 import subprocess
 import sys
 
-from handoff import PROVIDERS, STATE_ROOT, hook, session_id
+from handoff import PROVIDERS, STATE_ROOT, hook, read_object, session_id
 
 
 def main() -> int:
@@ -31,11 +31,7 @@ def main() -> int:
     if decision:
         print(json.dumps(decision))
         return 0
-    fallback_file = STATE_ROOT / "fallbacks.json"
-    try:
-        fallback = json.loads(fallback_file.read_text()).get(provider)
-    except (OSError, ValueError):
-        fallback = None
+    fallback = read_object(STATE_ROOT / "fallbacks.json").get(provider)
     if fallback:
         try:
             run = subprocess.run(fallback, shell=True, input=original, text=True, capture_output=True, timeout=200)
